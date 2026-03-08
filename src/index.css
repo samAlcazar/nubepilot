@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@theme {
+
+  /* ========================
+     PRIMARY BRAND COLORS
+  ======================== */
+
+  --color-primary: #2563EB;
+  --color-primary-dark: #1E3A8A;
+  --color-primary-light: #60A5FA;
+
+  /* ========================
+     STATUS COLORS
+  ======================== */
+
+  --color-success: #22C55E;
+  --color-success-light: #4ADE80;
+
+  --color-warning: #F59E0B;
+  --color-warning-light: #FBBF24;
+
+  --color-danger: #EF4444;
+
+  /* ========================
+     LIGHT MODE
+  ======================== */
+
+  --color-background: #F8FAFC;
+  --color-surface: #FFFFFF;
+
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #334155;
+  --color-text-muted: #64748B;
+
+  --color-border: #E2E8F0;
+
+  /* ========================
+     DARK MODE
+  ======================== */
+
+  --color-dark-bg: #0F172A;
+  --color-dark-surface: #1E293B;
+
+  --color-text-dark-primary: #F8FAFC;
+  --color-text-dark-secondary: #CBD5F5;
+  --color-text-dark-muted: #94A3B8;
+
+  --color-border-dark: #334155;
+}
