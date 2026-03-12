@@ -13,7 +13,7 @@
     console.log("Trackeando visita al producto:", data.product_id);
 
     // 2. Enviamos la información a TU servidor (Endpoint de tu App)
-    fetch('http://localhost:3000/api/dashboard/track-product-view', {
+    fetch('nubepilotback-production.up.railway.app/api/dashboard/track-product-view', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
