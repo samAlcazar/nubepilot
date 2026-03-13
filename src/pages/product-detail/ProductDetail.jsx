@@ -17,6 +17,7 @@ const ProductDetail = () => {
   const [requestError, setRequestError] = useState('')
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false)
   const [discountActionMessage, setDiscountActionMessage] = useState('')
+  const [isDiscountConfirmationOpen, setIsDiscountConfirmationOpen] = useState(false)
 
   const loadProductDetail = useCallback(async () => {
     setIsLoading(true)
@@ -87,7 +88,10 @@ const ProductDetail = () => {
         throw new Error(responseBody?.message || 'No se pudo aplicar el descuento')
       }
 
-      setDiscountActionMessage(`Descuento aplicado correctamente. Precio nuevo: ${responseBody.new_price}`)
+      setDiscountActionMessage(
+        `Descuento aplicado correctamente. Precio original: ${responseBody.original_price}. ` +
+        `Precio final: ${responseBody.new_price}`
+      )
       await loadProductDetail()
     } catch (error) {
       setRequestError(error.message)
@@ -149,6 +153,21 @@ const ProductDetail = () => {
       .map(category => category?.name?.es || category?.name?.en || category?.id)
       .join(', ')
   }, [product])
+
+  const hasDiscountApplied = Boolean(primaryVariant?.promotional_price)
+
+  const openDiscountConfirmation = () => {
+    setIsDiscountConfirmationOpen(true)
+  }
+
+  const closeDiscountConfirmation = () => {
+    setIsDiscountConfirmationOpen(false)
+  }
+
+  const confirmApplyDiscount = async () => {
+    closeDiscountConfirmation()
+    await handleApplyDiscount()
+  }
 
   return (
     <main className='min-h-screen bg-[linear-gradient(145deg,#f8fafc_0%,#eff6ff_40%,#e0f2fe_100%)] px-4 py-6 text-slate-900 sm:px-6 sm:py-10'>
@@ -312,6 +331,14 @@ const ProductDetail = () => {
                 Purchases: <strong>{productMetric?.purchases ?? 0}</strong>
               </div>
 
+              <div className='rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm text-slate-700'>
+                Precio original: <strong>{primaryVariant?.compare_at_price || primaryVariant?.price || '-'}</strong>
+              </div>
+
+              <div className='rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm text-slate-700'>
+                Precio final: <strong>{primaryVariant?.promotional_price || primaryVariant?.price || '-'}</strong>
+              </div>
+
               {productRecommendation
                 ? (
                   <div className='rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-800'>
@@ -319,13 +346,15 @@ const ProductDetail = () => {
                     <p className='mt-2'>{productRecommendation.message}</p>
                     <button
                       type='button'
-                      onClick={handleApplyDiscount}
-                      disabled={isApplyingDiscount}
+                      onClick={openDiscountConfirmation}
+                      disabled={isApplyingDiscount || hasDiscountApplied}
                       className='mt-4 w-full rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
                     >
                       {isApplyingDiscount
                         ? 'Aplicando descuento...'
-                        : `Aplicar ${RECOMMENDED_DISCOUNT_PERCENTAGE}%`}
+                        : hasDiscountApplied
+                          ? 'Descuento ya aplicado'
+                          : `Aplicar ${RECOMMENDED_DISCOUNT_PERCENTAGE}%`}
                     </button>
                   </div>
                   )
@@ -338,6 +367,36 @@ const ProductDetail = () => {
           </article>
         </div>
       </section>
+
+      {isDiscountConfirmationOpen && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4'>
+          <div className='w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_80px_rgba(15,23,42,0.35)]'>
+            <p className='text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700'>Confirmar acción</p>
+            <h3 className='mt-2 text-xl font-black text-slate-950'>Aplicar descuento al producto</h3>
+            <p className='mt-3 text-sm text-slate-600'>
+              Vas a aplicar un {RECOMMENDED_DISCOUNT_PERCENTAGE}% de descuento a{' '}
+              <span className='font-semibold text-slate-950'>{productName}</span>.
+            </p>
+
+            <div className='mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2'>
+              <button
+                type='button'
+                onClick={closeDiscountConfirmation}
+                className='rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100'
+              >
+                Cancelar
+              </button>
+              <button
+                type='button'
+                onClick={confirmApplyDiscount}
+                className='rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700'
+              >
+                Sí, aplicar descuento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

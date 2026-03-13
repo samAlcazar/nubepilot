@@ -31,6 +31,7 @@ const Home = () => {
   const [requestError, setRequestError] = useState('')
   const [applyingDiscountProductId, setApplyingDiscountProductId] = useState(null)
   const [discountActionMessage, setDiscountActionMessage] = useState('')
+  const [pendingDiscountProductId, setPendingDiscountProductId] = useState(null)
 
   const handleLogout = () => {
     clearStoredSession()
@@ -116,7 +117,10 @@ const Home = () => {
         throw new Error(responseBody?.message || 'No se pudo aplicar el descuento')
       }
 
-      setDiscountActionMessage(`Descuento aplicado a ${productNameById[String(productId)] || `Producto ${productId}`}. Nuevo precio: ${responseBody.new_price}`)
+      setDiscountActionMessage(
+        `Descuento aplicado a ${productNameById[String(productId)] || `Producto ${productId}`}. ` +
+        `Precio original: ${responseBody.original_price}. Precio final: ${responseBody.new_price}`
+      )
       await loadDashboard()
     } catch (error) {
       setRequestError(error.message)
@@ -135,6 +139,45 @@ const Home = () => {
       return accumulator
     }, {})
   }, [dashboardData.products])
+
+  const productById = useMemo(() => {
+    return dashboardData.products.reduce((accumulator, product) => {
+      accumulator[String(product.id)] = product
+      return accumulator
+    }, {})
+  }, [dashboardData.products])
+
+  const getPriceInfoByProductId = (productId) => {
+    const product = productById[String(productId)]
+    const variant = product?.variants?.[0]
+    const originalPrice = variant?.compare_at_price || variant?.price || '-'
+    const finalPrice = variant?.promotional_price || variant?.price || '-'
+    const hasDiscountApplied = Boolean(variant?.promotional_price)
+
+    return {
+      originalPrice,
+      finalPrice,
+      hasDiscountApplied
+    }
+  }
+
+  const openDiscountConfirmation = (productId) => {
+    setPendingDiscountProductId(productId)
+  }
+
+  const closeDiscountConfirmation = () => {
+    setPendingDiscountProductId(null)
+  }
+
+  const confirmApplyDiscount = async () => {
+    if (!pendingDiscountProductId) {
+      return
+    }
+
+    const productId = pendingDiscountProductId
+    closeDiscountConfirmation()
+    await handleApplyDiscount(productId)
+  }
 
   const performanceRows = useMemo(() => {
     return dashboardData.productMetrics
@@ -218,13 +261,13 @@ const Home = () => {
               Generar métricas
             </button>
 
-              <button
-                type='button'
-                onClick={loadDashboard}
-                className='inline-flex w-full items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 sm:w-auto'
-              >
-                Actualizar dashboard
-              </button>
+            <button
+              type='button'
+              onClick={loadDashboard}
+              className='inline-flex w-full items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 sm:w-auto'
+            >
+              Actualizar dashboard
+            </button>
 
             <button
               type='button'
@@ -434,28 +477,49 @@ const Home = () => {
 
                 {dashboardData.recommendations.map(recommendation => (
                   <div key={recommendation.product_id} className='rounded-2xl border border-amber-200 bg-white px-4 py-4'>
-                    <p className='text-sm font-semibold text-slate-950'>
-                      {productNameById[String(recommendation.product_id)] || `Producto ${recommendation.product_id}`}
-                    </p>
-                    <p className='mt-1 text-xs text-slate-500'>ID {recommendation.product_id}</p>
-                    <p className='mt-3 text-sm text-slate-700'>{recommendation.message}</p>
-                    <button
-                      type='button'
-                      onClick={() => handleApplyDiscount(recommendation.product_id)}
-                      disabled={applyingDiscountProductId === recommendation.product_id}
-                      className='mt-4 w-full rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
-                    >
-                      {applyingDiscountProductId === recommendation.product_id
-                        ? 'Aplicando descuento...'
-                        : `Aplicar ${RECOMMENDED_DISCOUNT_PERCENTAGE}%`}
-                    </button>
-                    <button
-                      type='button'
-                      onClick={() => handleOpenProductDetail(recommendation.product_id)}
-                      className='mt-2 w-full rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 sm:w-auto'
-                    >
-                      Ver detalle
-                    </button>
+                    {(() => {
+                      const priceInfo = getPriceInfoByProductId(recommendation.product_id)
+                      const isApplying = applyingDiscountProductId === recommendation.product_id
+
+                      return (
+                        <>
+                          <p className='text-sm font-semibold text-slate-950'>
+                            {productNameById[String(recommendation.product_id)] || `Producto ${recommendation.product_id}`}
+                          </p>
+                          <p className='mt-1 text-xs text-slate-500'>ID {recommendation.product_id}</p>
+                          <p className='mt-3 text-sm text-slate-700'>{recommendation.message}</p>
+
+                          <div className='mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-700'>
+                            <p>
+                              Precio original: <span className='font-semibold'>{priceInfo.originalPrice}</span>
+                            </p>
+                            <p className='mt-1'>
+                              Precio final: <span className='font-semibold'>{priceInfo.finalPrice}</span>
+                            </p>
+                          </div>
+
+                          <button
+                            type='button'
+                            onClick={() => openDiscountConfirmation(recommendation.product_id)}
+                            disabled={isApplying || priceInfo.hasDiscountApplied}
+                            className='mt-4 w-full rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
+                          >
+                            {isApplying
+                              ? 'Aplicando descuento...'
+                              : priceInfo.hasDiscountApplied
+                                ? 'Descuento ya aplicado'
+                                : `Aplicar ${RECOMMENDED_DISCOUNT_PERCENTAGE}%`}
+                          </button>
+                          <button
+                            type='button'
+                            onClick={() => handleOpenProductDetail(recommendation.product_id)}
+                            className='mt-2 w-full rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 sm:w-auto'
+                          >
+                            Ver detalle
+                          </button>
+                        </>
+                      )
+                    })()}
                   </div>
                 ))}
               </div>
@@ -478,6 +542,39 @@ const Home = () => {
           </div>
         </div>
       </section>
+
+      {pendingDiscountProductId && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4'>
+          <div className='w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_80px_rgba(15,23,42,0.35)]'>
+            <p className='text-sm font-semibold uppercase tracking-[0.2em] text-amber-700'>Confirmar acción</p>
+            <h3 className='mt-2 text-xl font-black text-slate-950'>Aplicar descuento ahora</h3>
+            <p className='mt-3 text-sm text-slate-600'>
+              Vas a aplicar un {RECOMMENDED_DISCOUNT_PERCENTAGE}% de descuento al producto{' '}
+              <span className='font-semibold text-slate-950'>
+                {productNameById[String(pendingDiscountProductId)] || `Producto ${pendingDiscountProductId}`}
+              </span>
+              .
+            </p>
+
+            <div className='mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2'>
+              <button
+                type='button'
+                onClick={closeDiscountConfirmation}
+                className='rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100'
+              >
+                Cancelar
+              </button>
+              <button
+                type='button'
+                onClick={confirmApplyDiscount}
+                className='rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600'
+              >
+                Sí, aplicar descuento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
