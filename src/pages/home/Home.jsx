@@ -28,6 +28,7 @@ const Home = () => {
     recommendations: []
   })
   const [isLoading, setIsLoading] = useState(true)
+  const [isRecommendationsLoading, setIsRecommendationsLoading] = useState(true)
   const [requestError, setRequestError] = useState('')
   const [applyingDiscountProductId, setApplyingDiscountProductId] = useState(null)
   const [discountActionMessage, setDiscountActionMessage] = useState('')
@@ -47,7 +48,9 @@ const Home = () => {
   }
 
   const loadDashboard = async () => {
+    const requestStartedAt = Date.now()
     setIsLoading(true)
+    setIsRecommendationsLoading(true)
     setRequestError('')
 
     try {
@@ -81,16 +84,34 @@ const Home = () => {
         throw new Error(recommendationsBody?.message || 'No se pudieron cargar las recomendaciones')
       }
 
+      // Load main dashboard data first, then reveal AI recommendations with a small delay.
       setDashboardData({
         products: productsBody,
         productMetrics: metricsBody,
         productViews: viewsBody,
-        recommendations: recommendationsBody
+        recommendations: []
       })
+
+      setIsLoading(false)
+
+      const minimumThinkingTimeMs = 2200
+      const elapsedMs = Date.now() - requestStartedAt
+      const remainingMs = Math.max(minimumThinkingTimeMs - elapsedMs, 0)
+
+      if (remainingMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, remainingMs))
+      }
+
+      setDashboardData(current => ({
+        ...current,
+        recommendations: recommendationsBody
+      }))
+
+      setIsRecommendationsLoading(false)
     } catch (error) {
       setRequestError(error.message)
-    } finally {
       setIsLoading(false)
+      setIsRecommendationsLoading(false)
     }
   }
 
@@ -317,6 +338,85 @@ const Home = () => {
           </article>
         </div>
 
+        <article className='rounded-3xl border border-amber-300 bg-[linear-gradient(140deg,#fef9c3_0%,#fffbeb_45%,#ffffff_100%)] p-6 shadow-[0_20px_80px_rgba(120,53,15,0.12)]'>
+          <div className='flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between'>
+            <div>
+              <p className='text-sm font-semibold uppercase tracking-[0.2em] text-amber-700'>Sugerencias IA</p>
+              <h2 className='mt-2 text-2xl font-black text-amber-950'>Recomendaciones de descuento</h2>
+              <p className='mt-2 text-sm text-amber-900/80'>
+                Esta sección muestra la decisión inteligente principal de la app basada en vistas, compras y precio.
+              </p>
+            </div>
+            <p className='rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-800'>
+              {isRecommendationsLoading ? 'IA analizando productos...' : `${dashboardData.recommendations.length} sugerencia(s)`}
+            </p>
+          </div>
+
+          <div className='mt-5 grid gap-4 lg:grid-cols-2'>
+            {isRecommendationsLoading && (
+              <div className='lg:col-span-2 rounded-2xl border border-amber-200 bg-white px-5 py-5'>
+                <div className='h-4 w-52 animate-pulse rounded bg-amber-100' />
+                <div className='mt-3 h-3 w-full animate-pulse rounded bg-amber-100' />
+                <div className='mt-2 h-3 w-3/4 animate-pulse rounded bg-amber-100' />
+              </div>
+            )}
+
+            {!isRecommendationsLoading && dashboardData.recommendations.length === 0 && (
+              <p className='lg:col-span-2 rounded-2xl border border-amber-200 bg-white px-4 py-4 text-sm text-amber-900'>
+                La IA no detectó productos críticos para descuento en esta corrida.
+              </p>
+            )}
+
+            {!isRecommendationsLoading && dashboardData.recommendations.map(recommendation => (
+              <div key={recommendation.product_id} className='rounded-2xl border border-amber-200 bg-white px-4 py-4'>
+                {(() => {
+                  const priceInfo = getPriceInfoByProductId(recommendation.product_id)
+                  const isApplying = applyingDiscountProductId === recommendation.product_id
+
+                  return (
+                    <>
+                      <p className='text-sm font-semibold text-slate-950'>
+                        {productNameById[String(recommendation.product_id)] || `Producto ${recommendation.product_id}`}
+                      </p>
+                      <p className='mt-1 text-xs text-slate-500'>ID {recommendation.product_id}</p>
+                      <p className='mt-3 text-sm text-slate-700'>{recommendation.message}</p>
+
+                      <div className='mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-700'>
+                        <p>
+                          Precio original: <span className='font-semibold'>{priceInfo.originalPrice}</span>
+                        </p>
+                        <p className='mt-1'>
+                          Precio final: <span className='font-semibold'>{priceInfo.finalPrice}</span>
+                        </p>
+                      </div>
+
+                      <button
+                        type='button'
+                        onClick={() => openDiscountConfirmation(recommendation.product_id)}
+                        disabled={isApplying || priceInfo.hasDiscountApplied}
+                        className='mt-4 w-full rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
+                      >
+                        {isApplying
+                          ? 'Aplicando descuento...'
+                          : priceInfo.hasDiscountApplied
+                            ? 'Descuento ya aplicado'
+                            : `Aplicar ${RECOMMENDED_DISCOUNT_PERCENTAGE}%`}
+                      </button>
+                      <button
+                        type='button'
+                        onClick={() => handleOpenProductDetail(recommendation.product_id)}
+                        className='mt-2 w-full rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 sm:w-auto'
+                      >
+                        Ver detalle
+                      </button>
+                    </>
+                  )
+                })()}
+              </div>
+            ))}
+          </div>
+        </article>
+
         <div className='grid gap-6 xl:grid-cols-[1.15fr_0.85fr]'>
           <article className='rounded-3xl border border-slate-200 bg-white p-6'>
             <div className='flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between'>
@@ -462,67 +562,6 @@ const Home = () => {
               <h2 className='mt-2 text-2xl font-black text-slate-950'>{session?.name}</h2>
               <p className='mt-3 text-sm text-slate-600'>{session?.email}</p>
               <p className='mt-1 text-sm text-slate-500'>Rol: {session?.role}</p>
-            </article>
-
-            <article className='rounded-3xl border border-amber-200 bg-amber-50 p-6'>
-              <p className='text-sm font-semibold uppercase tracking-[0.2em] text-amber-700'>Recomendaciones</p>
-              <h2 className='mt-2 text-2xl font-black text-amber-950'>Descuentos sugeridos</h2>
-
-              <div className='mt-4 space-y-3'>
-                {!isLoading && dashboardData.recommendations.length === 0 && (
-                  <p className='rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm text-amber-900'>
-                    Aún no hay productos que cumplan la regla de recomendación.
-                  </p>
-                )}
-
-                {dashboardData.recommendations.map(recommendation => (
-                  <div key={recommendation.product_id} className='rounded-2xl border border-amber-200 bg-white px-4 py-4'>
-                    {(() => {
-                      const priceInfo = getPriceInfoByProductId(recommendation.product_id)
-                      const isApplying = applyingDiscountProductId === recommendation.product_id
-
-                      return (
-                        <>
-                          <p className='text-sm font-semibold text-slate-950'>
-                            {productNameById[String(recommendation.product_id)] || `Producto ${recommendation.product_id}`}
-                          </p>
-                          <p className='mt-1 text-xs text-slate-500'>ID {recommendation.product_id}</p>
-                          <p className='mt-3 text-sm text-slate-700'>{recommendation.message}</p>
-
-                          <div className='mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-700'>
-                            <p>
-                              Precio original: <span className='font-semibold'>{priceInfo.originalPrice}</span>
-                            </p>
-                            <p className='mt-1'>
-                              Precio final: <span className='font-semibold'>{priceInfo.finalPrice}</span>
-                            </p>
-                          </div>
-
-                          <button
-                            type='button'
-                            onClick={() => openDiscountConfirmation(recommendation.product_id)}
-                            disabled={isApplying || priceInfo.hasDiscountApplied}
-                            className='mt-4 w-full rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
-                          >
-                            {isApplying
-                              ? 'Aplicando descuento...'
-                              : priceInfo.hasDiscountApplied
-                                ? 'Descuento ya aplicado'
-                                : `Aplicar ${RECOMMENDED_DISCOUNT_PERCENTAGE}%`}
-                          </button>
-                          <button
-                            type='button'
-                            onClick={() => handleOpenProductDetail(recommendation.product_id)}
-                            className='mt-2 w-full rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 sm:w-auto'
-                          >
-                            Ver detalle
-                          </button>
-                        </>
-                      )
-                    })()}
-                  </div>
-                ))}
-              </div>
             </article>
 
             <article className='rounded-3xl border border-blue-200 bg-blue-50 p-6'>
